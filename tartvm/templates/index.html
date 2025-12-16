@@ -1,0 +1,678 @@
+{% extends "base.html" %}
+
+{% block title %}de taartenfabriek{% endblock %}
+
+{% block content %}
+<div class="mb-8">
+    <div class="flex justify-between items-center">
+        <h2 class="text-2xl font-bold text-gray-900">Virtual Machines</h2>
+        <div class="space-x-2">
+            <button id="pull-vm-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium">
+                <i class="fas fa-download mr-1"></i> Pull VM
+            </button>
+        </div>
+    </div>
+
+    <div class="mt-4 flex items-center justify-between">
+        <div class="inline-flex rounded-md shadow-sm" role="group">
+            <button id="view-cards-btn" type="button" class="px-3 py-2 text-sm font-medium border border-gray-300 rounded-l-md bg-white text-gray-700 hover:bg-gray-50">
+                Cards
+            </button>
+            <button id="view-list-btn" type="button" class="px-3 py-2 text-sm font-medium border border-gray-300 rounded-r-md bg-white text-gray-700 hover:bg-gray-50">
+                List
+            </button>
+        </div>
+    </div>
+    
+    <div class="mt-6">
+        <div class="bg-white shadow overflow-hidden rounded-lg">
+            <div id="vms-loading" class="p-8 text-center">
+                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
+                <p class="mt-2 text-gray-600">Loading VMs...</p>
+            </div>
+            <div id="vms-container" class="hidden">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">IP Address</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CPU</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Memory</th>
+                            <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="vms-list" class="bg-white divide-y divide-gray-200">
+                        <!-- VMs will be populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+            <div id="vms-cards-container" class="hidden p-6">
+                <div id="vms-cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <!-- VM cards will be populated by JavaScript -->
+                </div>
+            </div>
+            <div id="vms-empty" class="hidden p-8 text-center">
+                <i class="fas fa-server text-4xl text-gray-300 mb-4"></i>
+                <h3 class="text-lg font-medium text-gray-900">No VMs found</h3>
+                <p class="mt-1 text-sm text-gray-500">Get started by pulling a VM image.</p>
+                <div class="mt-6">
+                    <button id="pull-vm-empty-btn" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        <i class="fas fa-download mr-2"></i> Pull VM
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Pull VM Modal -->
+<div id="pull-vm-modal" class="fixed z-10 inset-0 overflow-y-auto hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true"></div>
+        <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+        <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+            <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div class="sm:flex sm:items-start">
+                    <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-indigo-100 sm:mx-0 sm:h-10 sm:w-10">
+                        <i class="fas fa-download text-indigo-600"></i>
+                    </div>
+                    <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+                        <h3 class="text-lg leading-6 font-medium text-gray-900" id="modal-title">Pull VM Image</h3>
+                        <div class="mt-2">
+                            <p class="text-sm text-gray-500">
+                                Enter the OCI URL of the VM image to pull (e.g., ghcr.io/cirruslabs/macos-ventura-base:latest)
+                            </p>
+                            <div class="mt-4">
+                                <input type="text" id="oci-url" class="shadow-sm focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm border-gray-300 rounded-md p-2 border" placeholder="ghcr.io/cirruslabs/macos-ventura-base:latest">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                <button type="button" id="pull-confirm-btn" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:ml-3 sm:w-auto sm:text-sm">
+                    Pull
+                </button>
+                <button type="button" id="pull-cancel-btn" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Task Logs Modal -->
+<div id="task-logs-modal" class="fixed z-10 inset-0 overflow-y-auto hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true"></div>
+        <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+        <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
+            <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div class="sm:flex sm:items-start">
+                    <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+                        <div class="flex justify-between items-center">
+                            <h3 class="text-lg leading-6 font-medium text-gray-900" id="task-title">Task Logs</h3>
+                            <div id="task-status" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium">
+                                <!-- Status badge will be inserted here -->
+                            </div>
+                        </div>
+                        <div class="mt-4">
+                            <div id="task-logs" class="bg-black text-green-400 font-mono text-sm p-4 rounded-md h-96 overflow-y-auto">
+                                <div class="text-gray-500">Waiting for logs...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                <button type="button" id="close-logs-btn" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:ml-3 sm:w-auto sm:text-sm">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Global variables
+    let currentTaskId = null;
+    let taskSocket = null;
+    let lastVMs = null;
+    let currentView = 'cards';
+    const VIEW_STORAGE_KEY = 'de-taartenfabriek:vmView';
+    const vmConfigCache = new Map();
+
+    const AUTO_REFRESH_MS = 10000;
+    let autoRefreshTimer = null;
+    let autoRefreshInFlight = false;
+    
+    // DOM elements
+    const vmsList = document.getElementById('vms-list');
+    const vmsLoading = document.getElementById('vms-loading');
+    const vmsContainer = document.getElementById('vms-container');
+    const vmsCardsContainer = document.getElementById('vms-cards-container');
+    const vmsCards = document.getElementById('vms-cards');
+    const vmsEmpty = document.getElementById('vms-empty');
+
+    const viewCardsBtn = document.getElementById('view-cards-btn');
+    const viewListBtn = document.getElementById('view-list-btn');
+    
+    // Modal elements
+    const pullVmModal = document.getElementById('pull-vm-modal');
+    const pullVmBtn = document.getElementById('pull-vm-btn');
+    const pullVmEmptyBtn = document.getElementById('pull-vm-empty-btn');
+    const pullConfirmBtn = document.getElementById('pull-confirm-btn');
+    const pullCancelBtn = document.getElementById('pull-cancel-btn');
+    const ociUrlInput = document.getElementById('oci-url');
+    
+    const taskLogsModal = document.getElementById('task-logs-modal');
+    const taskTitle = document.getElementById('task-title');
+    const taskStatus = document.getElementById('task-status');
+    const taskLogs = document.getElementById('task-logs');
+    const closeLogsBtn = document.getElementById('close-logs-btn');
+    
+    // Event listeners
+    document.addEventListener('DOMContentLoaded', () => {
+        const storedView = window.localStorage.getItem(VIEW_STORAGE_KEY);
+        if (storedView === 'list' || storedView === 'cards') {
+            currentView = storedView;
+        }
+        updateViewToggle();
+
+        // Load VMs on page load
+        loadVMsCached();
+
+        // Silent auto-refresh (keeps UI in sync with backend monitoring)
+        startAutoRefresh();
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                stopAutoRefresh();
+            } else {
+                startAutoRefresh();
+                loadVMsSilent();
+            }
+        });
+        
+        // Set up event listeners
+        document.getElementById('refresh-btn').addEventListener('click', loadVMs);
+
+        viewCardsBtn.addEventListener('click', () => setView('cards'));
+        viewListBtn.addEventListener('click', () => setView('list'));
+        
+        // Pull VM modal
+        pullVmBtn.addEventListener('click', () => showModal(pullVmModal));
+        pullVmEmptyBtn.addEventListener('click', () => showModal(pullVmModal));
+        pullCancelBtn.addEventListener('click', () => hideModal(pullVmModal));
+        pullConfirmBtn.addEventListener('click', handlePullVm);
+        
+        // Task logs modal
+        closeLogsBtn.addEventListener('click', () => {
+            hideModal(taskLogsModal);
+            if (taskSocket) {
+                taskSocket.close();
+                taskSocket = null;
+            }
+            loadVMsCached();
+        });
+
+        // Close modals when clicking outside
+        window.addEventListener('click', (e) => {
+            if (e.target === pullVmModal) hideModal(pullVmModal);
+            if (e.target === taskLogsModal) {
+                hideModal(taskLogsModal);
+                if (taskSocket) {
+                    taskSocket.close();
+                    taskSocket = null;
+                }
+                loadVMsCached();
+            }
+        });
+    });
+
+    function startAutoRefresh() {
+        if (autoRefreshTimer) return;
+        autoRefreshTimer = window.setInterval(() => {
+            if (document.hidden) return;
+            loadVMsSilent();
+        }, AUTO_REFRESH_MS);
+    }
+
+    function stopAutoRefresh() {
+        if (!autoRefreshTimer) return;
+        window.clearInterval(autoRefreshTimer);
+        autoRefreshTimer = null;
+    }
+
+    async function loadVMsSilent() {
+        if (autoRefreshInFlight) return;
+        autoRefreshInFlight = true;
+        try {
+            const vms = await api.get('/api/vms');
+            lastVMs = vms;
+            renderVMs(vms);
+        } catch (error) {
+            console.warn('Silent VM refresh failed:', error);
+        } finally {
+            autoRefreshInFlight = false;
+        }
+    }
+
+    async function loadVMsCached() {
+        try {
+            showLoading();
+            const vms = await api.get('/api/vms');
+            lastVMs = vms;
+            renderVMs(vms);
+        } catch (error) {
+            console.error('Error loading VMs:', error);
+            showToast('Failed to load VMs', 'error');
+        } finally {
+            hideLoading();
+        }
+    }
+    
+    // Functions
+    async function loadVMs() {
+        try {
+            showLoading();
+            const vms = await api.post('/api/vms/refresh', {});
+            lastVMs = vms;
+            renderVMs(vms);
+        } catch (error) {
+            console.error('Error loading VMs:', error);
+            showToast('Failed to load VMs', 'error');
+        } finally {
+            hideLoading();
+        }
+    }
+    
+    function renderVMs(vms) {
+        if (!vms || vms.length === 0) {
+            vmsContainer.classList.add('hidden');
+            vmsCardsContainer.classList.add('hidden');
+            vmsEmpty.classList.remove('hidden');
+            return;
+        }
+
+        vmsEmpty.classList.add('hidden');
+
+        if (currentView === 'list') {
+            renderVMTable(vms);
+        } else {
+            renderVMCards(vms);
+        }
+    }
+
+    function getStatusBadge(vm) {
+        if (vm.status === 'running') {
+            return '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">Running</span>';
+        }
+        if (vm.status === 'stopped') {
+            return '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">Stopped</span>';
+        }
+        return '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">Unknown</span>';
+    }
+
+    function renderVMTable(vms) {
+        vmsList.innerHTML = '';
+
+        vms.forEach(vm => {
+            const row = document.createElement('tr');
+            const statusBadge = getStatusBadge(vm);
+
+            const actions = `
+                <div class="flex justify-end space-x-2">
+                    <button class="text-indigo-600 hover:text-indigo-900" onclick="handleVmAction('${vm.name}', 'start')" ${vm.status === 'running' ? 'disabled' : ''}>
+                        <i class="fas fa-play"></i>
+                    </button>
+                    <button class="text-red-600 hover:text-red-900" onclick="handleVmAction('${vm.name}', 'stop')" ${vm.status !== 'running' ? 'disabled' : ''}>
+                        <i class="fas fa-stop"></i>
+                    </button>
+                    <button class="text-gray-600 hover:text-gray-900" onclick="handleVmAction('${vm.name}', 'delete')">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            `;
+
+            row.innerHTML = `
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <div class="text-sm font-medium text-gray-900">${vm.name}</div>
+                    <div class="text-sm text-gray-500">${vm.source || 'Unknown source'}</div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                    ${statusBadge}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    ${vm.ip_address ? `<a class="text-indigo-600 hover:text-indigo-900 font-mono" href="vnc://${vm.ip_address}">${vm.ip_address}</a>` : 'N/A'}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    ${vmConfigCache.get(vm.name)?.cpu || vm.cpu || 'N/A'}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    ${vmConfigCache.get(vm.name)?.memory || vm.memory || 'N/A'}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    ${actions}
+                </td>
+            `;
+
+            vmsList.appendChild(row);
+
+            ensureVmConfigLoaded(vm.name);
+        });
+
+        vmsCardsContainer.classList.add('hidden');
+        vmsContainer.classList.remove('hidden');
+        vmsEmpty.classList.add('hidden');
+    }
+
+    function renderVMCards(vms) {
+        vmsCards.innerHTML = '';
+
+        vms.forEach(vm => {
+            const statusBadge = getStatusBadge(vm);
+            const ipBlock = vm.ip_address
+                ? `<a class="text-indigo-600 hover:text-indigo-900 font-mono" href="vnc://${vm.ip_address}">vnc://${vm.ip_address}</a>`
+                : '<span class="text-gray-500">N/A</span>';
+
+            const cachedConfig = vmConfigCache.get(vm.name);
+            const cpuText = (cachedConfig && cachedConfig.cpu) ? cachedConfig.cpu : (vm.cpu || 'Loading…');
+            const memText = (cachedConfig && cachedConfig.memory) ? cachedConfig.memory : (vm.memory || 'Loading…');
+            const diskText = (cachedConfig && cachedConfig.disk_size) ? cachedConfig.disk_size : 'Loading…';
+
+            const card = document.createElement('div');
+            card.className = 'bg-white border border-gray-200 rounded-lg shadow-sm';
+            card.dataset.vm = vm.name;
+
+            card.innerHTML = `
+                <div class="px-4 py-3 border-b border-gray-100 flex items-start justify-between gap-3">
+                    <div class="min-w-0">
+                        <div class="text-sm font-semibold text-gray-900 truncate">${vm.name}</div>
+                        <div class="mt-1">${statusBadge}</div>
+                    </div>
+                    <div class="flex items-center space-x-2 flex-shrink-0">
+                        <button class="text-indigo-600 hover:text-indigo-900" title="Start" onclick="handleVmAction('${vm.name}', 'start')" ${vm.status === 'running' ? 'disabled' : ''}>
+                            <i class="fas fa-play"></i>
+                        </button>
+                        <button class="text-red-600 hover:text-red-900" title="Stop" onclick="handleVmAction('${vm.name}', 'stop')" ${vm.status !== 'running' ? 'disabled' : ''}>
+                            <i class="fas fa-stop"></i>
+                        </button>
+                        <button class="text-gray-600 hover:text-gray-900" title="Delete" onclick="handleVmAction('${vm.name}', 'delete')">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="px-4 py-4 space-y-3">
+                    <div class="text-sm text-gray-600">${vm.source || 'Local VM'}</div>
+
+                    <div class="text-sm">
+                        <div class="text-xs font-medium text-gray-500 uppercase tracking-wider">VNC</div>
+                        <div class="mt-1">${ipBlock}</div>
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-4">
+                        <div class="text-sm">
+                            <div class="text-xs font-medium text-gray-500 uppercase tracking-wider">CPU</div>
+                            <div class="mt-1 text-gray-900" data-field="cpu">${cpuText}</div>
+                        </div>
+                        <div class="text-sm">
+                            <div class="text-xs font-medium text-gray-500 uppercase tracking-wider">Memory</div>
+                            <div class="mt-1 text-gray-900" data-field="memory">${memText}</div>
+                        </div>
+                        <div class="text-sm">
+                            <div class="text-xs font-medium text-gray-500 uppercase tracking-wider">Disk</div>
+                            <div class="mt-1 text-gray-900" data-field="disk">${diskText}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            vmsCards.appendChild(card);
+
+            ensureVmConfigLoaded(vm.name);
+        });
+
+        vmsContainer.classList.add('hidden');
+        vmsCardsContainer.classList.remove('hidden');
+        vmsEmpty.classList.add('hidden');
+    }
+
+    function setView(view) {
+        if (view !== 'cards' && view !== 'list') return;
+        currentView = view;
+        window.localStorage.setItem(VIEW_STORAGE_KEY, view);
+        updateViewToggle();
+
+        if (lastVMs) {
+            renderVMs(lastVMs);
+        } else {
+            loadVMsCached();
+        }
+    }
+
+    function updateViewToggle() {
+        const activeClasses = ['bg-indigo-600', 'text-white', 'border-indigo-600'];
+        const inactiveClasses = ['bg-white', 'text-gray-700', 'border-gray-300'];
+
+        const setButtonState = (btn, active) => {
+            activeClasses.forEach(c => btn.classList.toggle(c, active));
+            inactiveClasses.forEach(c => btn.classList.toggle(c, !active));
+        };
+
+        setButtonState(viewCardsBtn, currentView === 'cards');
+        setButtonState(viewListBtn, currentView === 'list');
+    }
+
+    async function ensureVmConfigLoaded(vmName) {
+        if (vmConfigCache.has(vmName)) {
+            return;
+        }
+
+        try {
+            const cfg = await api.get(`/api/vms/${encodeURIComponent(vmName)}/config`);
+            vmConfigCache.set(vmName, cfg);
+            applyVmConfigToCard(vmName, cfg);
+
+            if (currentView === 'list' && lastVMs) {
+                renderVMTable(lastVMs);
+            }
+        } catch (error) {
+            // Best-effort: leave placeholders.
+            console.warn('Failed to load VM config for', vmName, error);
+        }
+    }
+
+    function applyVmConfigToCard(vmName, cfg) {
+        const card = vmsCards.querySelector(`[data-vm="${CSS.escape(vmName)}"]`);
+        if (!card) return;
+
+        const cpuEl = card.querySelector('[data-field="cpu"]');
+        const memEl = card.querySelector('[data-field="memory"]');
+        const diskEl = card.querySelector('[data-field="disk"]');
+
+        if (cpuEl) cpuEl.textContent = cfg.cpu || cpuEl.textContent;
+        if (memEl) memEl.textContent = cfg.memory || memEl.textContent;
+        if (diskEl) diskEl.textContent = cfg.disk_size || diskEl.textContent;
+    }
+    
+    async function handleVmAction(vmName, action) {
+        try {
+            let endpoint = '';
+            let actionText = '';
+            
+            switch (action) {
+                case 'start':
+                    endpoint = `/api/vms/${encodeURIComponent(vmName)}/start`;
+                    actionText = 'Starting';
+                    break;
+                case 'stop':
+                    endpoint = `/api/vms/${encodeURIComponent(vmName)}/stop`;
+                    actionText = 'Stopping';
+                    break;
+                case 'delete':
+                    if (!confirm(`Are you sure you want to delete ${vmName}? This action cannot be undone.`)) {
+                        return;
+                    }
+                    endpoint = `/api/vms/${encodeURIComponent(vmName)}/delete`;
+                    actionText = 'Deleting';
+                    break;
+                default:
+                    return;
+            }
+            
+            showToast(`${actionText} VM ${vmName}...`, 'info');
+            const task = await api.post(endpoint, {});
+            showTaskLogs(task.id, `${actionText} VM ${vmName}`);
+            
+        } catch (error) {
+            console.error(`Error ${action} VM:`, error);
+            showToast(`Failed to ${action} VM ${vmName}`, 'error');
+        }
+    }
+    
+    async function handlePullVm() {
+        const ociUrl = ociUrlInput.value.trim();
+        if (!ociUrl) {
+            showToast('Please enter an OCI URL', 'error');
+            return;
+        }
+        
+        try {
+            hideModal(pullVmModal);
+            showToast(`Pulling VM image: ${ociUrl}`, 'info');
+            
+            const task = await api.post('/api/vms/pull', { oci_url: ociUrl });
+            showTaskLogs(task.id, `Pulling VM: ${ociUrl}`);
+            
+            // Clear the input
+            ociUrlInput.value = '';
+            
+        } catch (error) {
+            console.error('Error pulling VM:', error);
+            showToast(`Failed to pull VM: ${error.message}`, 'error');
+        }
+    }
+    
+    function showTaskLogs(taskId, title) {
+        currentTaskId = taskId;
+        taskTitle.textContent = title;
+        taskLogs.innerHTML = '<div class="text-gray-500">Waiting for logs...</div>';
+        
+        // Connect to WebSocket for real-time logs
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${window.location.host}/ws/tasks/${taskId}?token=${encodeURIComponent(window.API_TOKEN || '')}`;
+        
+        taskSocket = new WebSocket(wsUrl);
+        
+        taskSocket.onmessage = (event) => {
+            const task = JSON.parse(event.data);
+            
+            // Update status badge
+            let statusClass = 'bg-yellow-100 text-yellow-800';
+            if (task.status === 'completed') {
+                statusClass = 'bg-green-100 text-green-800';
+            } else if (task.status === 'failed') {
+                statusClass = 'bg-red-100 text-red-800';
+            }
+            
+            taskStatus.className = `inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusClass}`;
+            taskStatus.textContent = task.status.charAt(0).toUpperCase() + task.status.slice(1);
+            
+            // Update logs
+            if (task.logs && task.logs.length > 0) {
+                taskLogs.innerHTML = task.logs.map(log => 
+                    `<div class="log-entry">${escapeHtml(log)}</div>`
+                ).join('');
+                taskLogs.scrollTop = taskLogs.scrollHeight;
+            }
+            
+            // Close modal if task is completed or failed
+            if (task.status === 'completed' || task.status === 'failed') {
+                // Auto-close after a delay if successful
+                if (task.status === 'completed') {
+                    setTimeout(() => {
+                        if (taskSocket) {
+                            taskSocket.close();
+                            taskSocket = null;
+                        }
+                        hideModal(taskLogsModal);
+                        loadVMsCached(); // Refresh VM list (backend already refreshed inventory)
+                    }, 2000);
+                }
+            }
+        };
+        
+        taskSocket.onclose = () => {
+            taskSocket = null;
+        };
+        
+        showModal(taskLogsModal);
+    }
+    
+    // Helper functions
+    function showModal(modal) {
+        modal.classList.remove('hidden');
+        document.body.classList.add('overflow-hidden');
+    }
+    
+    function hideModal(modal) {
+        modal.classList.add('hidden');
+        document.body.classList.remove('overflow-hidden');
+    }
+    
+    function showLoading() {
+        vmsLoading.classList.remove('hidden');
+        vmsContainer.classList.add('hidden');
+        vmsCardsContainer.classList.add('hidden');
+        vmsEmpty.classList.add('hidden');
+    }
+    
+    function hideLoading() {
+        vmsLoading.classList.add('hidden');
+    }
+    
+    function showToast(message, type = 'info') {
+        const toast = document.getElementById('toast');
+        const toastMessage = document.getElementById('toast-message');
+        
+        // Set message and style based on type
+        toastMessage.textContent = message;
+        
+        // Reset classes
+        toast.className = 'fixed bottom-4 right-4 px-4 py-3 rounded shadow-lg flex items-center';
+        
+        // Add type-specific classes
+        if (type === 'error') {
+            toast.classList.add('bg-red-100', 'text-red-700');
+        } else if (type === 'success') {
+            toast.classList.add('bg-green-100', 'text-green-700');
+        } else {
+            toast.classList.add('bg-blue-100', 'text-blue-700');
+        }
+        
+        // Show toast
+        toast.classList.remove('hidden');
+        
+        // Auto-hide after 5 seconds
+        setTimeout(() => {
+            toast.classList.add('hidden');
+        }, 5000);
+    }
+    
+    function escapeHtml(unsafe) {
+        return unsafe
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+    
+    // Make functions available globally
+    window.handleVmAction = handleVmAction;
+</script>
+{% endblock %}
