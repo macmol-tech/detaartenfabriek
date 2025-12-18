@@ -26,31 +26,6 @@ class VMModel(BaseModel):
     display: Optional[str] = None
 
 
-class VMCreate(BaseModel):
-    """Model for creating a new VM."""
-    name: str
-    source: str
-    cpu: Optional[int] = 4
-    memory: Optional[str] = "4G"
-    disk_size: Optional[str] = "32G"
-
-
-class VMUpdate(BaseModel):
-    """Model for updating a VM."""
-    cpu: Optional[int] = None
-    memory: Optional[str] = None
-    disk_size: Optional[str] = None
-
-
-class VMAction(str, Enum):
-    """VM actions."""
-    START = "start"
-    STOP = "stop"
-    DELETE = "delete"
-    CLONE = "clone"
-    PULL = "pull"
-
-
 class TaskStatus(str, Enum):
     """Task status enum."""
     PENDING = "pending"
@@ -88,3 +63,24 @@ class VMConfigModel(BaseModel):
     memory: Optional[str] = None
     disk_size: Optional[str] = None
     raw: Dict[str, Any] = Field(default_factory=dict)
+
+
+class VMImageModel(BaseModel):
+    """Model for available VM images."""
+    name: str
+    url: str
+    description: Optional[str] = None
+    tags: List[str] = Field(default_factory=list)
+    updated_at: Optional[str] = None
+
+
+class CloneVMRequest(BaseModel):
+    """Request model for cloning a VM."""
+    new_name: str
+    start_after_clone: bool = False
+
+
+class VMImagesSummary(BaseModel):
+    """Categorized VM list."""
+    base_images: List[VMModel] = Field(default_factory=list)
+    working_vms: List[VMModel] = Field(default_factory=list)
