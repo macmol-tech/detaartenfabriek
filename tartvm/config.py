@@ -27,9 +27,22 @@ class Settings(BaseSettings):
     # Tart settings
     TART_PATH: str = "tart"
     DEFAULT_NETWORK_INTERFACE: str = "en0"
-    
+
     # Task settings
     MAX_TASK_LOGS: int = 1000
+
+    # Tart command timeouts (in seconds)
+    TIMEOUT_LIST: int = 5
+    TIMEOUT_GET: int = 10
+    TIMEOUT_IP: int = 4
+    TIMEOUT_STOP: int = 40
+    TIMEOUT_DELETE: int = 60
+    TIMEOUT_PULL: int = 3600
+    TIMEOUT_CLONE: int = 120
+
+    # GitHub API settings
+    GITHUB_TOKEN: Optional[str] = None
+    GITHUB_TOKEN_FILE: Path = Field(default_factory=lambda: Path.home() / ".tartvm-manager" / "github_token")
     
     class Config:
         """Pydantic config."""
@@ -85,3 +98,11 @@ if not settings.TOKEN_FILE.exists():
 else:
     _ensure_token_file_perms(settings.TOKEN_FILE)
     settings.SECRET_KEY = settings.TOKEN_FILE.read_text().strip()
+
+# Load GitHub token if it exists
+if settings.GITHUB_TOKEN_FILE.exists():
+    try:
+        _ensure_token_file_perms(settings.GITHUB_TOKEN_FILE)
+        settings.GITHUB_TOKEN = settings.GITHUB_TOKEN_FILE.read_text().strip()
+    except Exception:
+        pass
