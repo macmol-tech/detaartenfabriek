@@ -82,14 +82,6 @@ class ApiClient {
             throw error;
         }
     }
-
-    /**
-     * Handle API errors
-     */
-    _handleError(error) {
-        console.error('API Error:', error);
-        throw error;
-    }
 }
 
 // Create a singleton instance
