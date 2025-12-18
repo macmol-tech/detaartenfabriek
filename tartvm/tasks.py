@@ -2,6 +2,7 @@
 import asyncio
 import json
 import logging
+import re
 import secrets
 import subprocess
 import time
@@ -13,6 +14,14 @@ from .config import settings
 from .models import TaskModel, TaskStatus, VMConfigModel, VMModel, VMStatus
 
 logger = logging.getLogger(__name__)
+
+# Regex pattern to match ANSI escape sequences
+ANSI_ESCAPE_PATTERN = re.compile(r'\x1b\[[0-9;?]*[a-zA-Z]|\x1b\][^\x07]*\x07|\x1b[=>]|\x1b[@-_][0-?]*[ -/]*[@-~]')
+
+
+def strip_ansi_codes(text: str) -> str:
+    """Remove ANSI escape sequences from text."""
+    return ANSI_ESCAPE_PATTERN.sub('', text)
 
 
 class TartCommandError(RuntimeError):
@@ -40,9 +49,10 @@ class TartCommandError(RuntimeError):
 @dataclass
 class TaskManager:
     """Manages background tasks for VM operations."""
-    
+
     tasks: Dict[str, TaskModel] = field(default_factory=dict)
-    _task_subscribers: Dict[str, Set[asyncio.Queue]] = field(default_factory=lambda: {})
+    _task_subscribers: Dict[str, Set[asyncio.Queue]] = field(default_factory=dict)
+    _task_cleanup_task: Optional[asyncio.Task] = None
 
     inventory: Dict[str, VMModel] = field(default_factory=dict)
     inventory_last_refresh: Optional[float] = None
@@ -167,6 +177,11 @@ class TaskManager:
                 if not line:
                     break
                 text = line.decode(errors="replace").rstrip("\n")
+                # Strip ANSI escape sequences (progress bars, colors, cursor movements)
+                text = strip_ansi_codes(text)
+                # Skip empty lines that were only ANSI codes
+                if not text.strip():
+                    continue
                 sink.append(text)
                 if task_id:
                     await self.update_task(task_id, log=f"{prefix}{text}")
@@ -206,21 +221,26 @@ class TaskManager:
         timeout_seconds: Optional[float] = None,
         **kwargs
     ) -> Tuple[int, str, str]:
-        """Run a tart command with the given arguments."""
+        """Run a tart command with the given arguments.
+
+        Uses configurable timeouts from settings if not explicitly provided.
+        """
         if timeout_seconds is None:
             cmd0 = args[0] if args else ""
             if cmd0 in {"list"}:
-                timeout_seconds = 5
+                timeout_seconds = settings.TIMEOUT_LIST
             elif cmd0 in {"get"}:
-                timeout_seconds = 10
+                timeout_seconds = settings.TIMEOUT_GET
             elif cmd0 in {"ip"}:
-                timeout_seconds = 4
+                timeout_seconds = settings.TIMEOUT_IP
             elif cmd0 in {"stop"}:
-                timeout_seconds = 40
+                timeout_seconds = settings.TIMEOUT_STOP
             elif cmd0 in {"delete"}:
-                timeout_seconds = 60
+                timeout_seconds = settings.TIMEOUT_DELETE
             elif cmd0 in {"pull"}:
-                timeout_seconds = 3600
+                timeout_seconds = settings.TIMEOUT_PULL
+            elif cmd0 in {"clone"}:
+                timeout_seconds = settings.TIMEOUT_CLONE
 
         cmd = [settings.TART_PATH] + args
         return await self.run_command(cmd, task_id, timeout_seconds=timeout_seconds, **kwargs)
@@ -231,6 +251,19 @@ class TaskManager:
         vm_name: str,
         task_id: Optional[str] = None,
     ) -> Tuple[int, Path]:
+        """Start a tart run command as a detached process with output redirected to a log file.
+
+        Args:
+            args: Command arguments (without the tart executable path)
+            vm_name: Name of the VM
+            task_id: Optional task ID for logging
+
+        Returns:
+            Tuple of (process PID, log file path)
+
+        Raises:
+            RuntimeError: If the process fails to start
+        """
         logs_dir = settings.TOKEN_FILE.parent / "logs"
         logs_dir.mkdir(parents=True, exist_ok=True)
         try:
@@ -246,23 +279,31 @@ class TaskManager:
         if task_id:
             await self.update_task(task_id, command=cmd)
 
-        log_file = open(log_path, "a", encoding="utf-8")
+        # Use context manager to ensure file handle is properly closed
+        process = None
         try:
-            process = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdin=subprocess.DEVNULL,
-                stdout=log_file,
-                stderr=log_file,
-                start_new_session=True,
-            )
-        finally:
-            # Safe: child process holds its own fd; we can close our handle.
-            try:
-                log_file.close()
-            except Exception:
-                pass
+            with open(log_path, "a", encoding="utf-8") as log_file:
+                process = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdin=subprocess.DEVNULL,
+                    stdout=log_file,
+                    stderr=log_file,
+                    start_new_session=True,
+                )
+                # Process is now running; file handle will be closed when exiting context
+                # but the process keeps its own reference to the file descriptor
 
-        return process.pid, log_path
+            return process.pid, log_path
+
+        except Exception as e:
+            # If process failed to start, ensure we clean up
+            if process is not None:
+                try:
+                    process.kill()
+                    await process.wait()
+                except Exception:
+                    pass
+            raise RuntimeError(f"Failed to start detached tart process: {e}") from e
 
     async def get_inventory(self) -> List[VMModel]:
         async with self._inventory_lock:
@@ -305,6 +346,64 @@ class TaskManager:
             except Exception:
                 pass
             await asyncio.sleep(interval_seconds)
+
+    def start_task_cleanup(self, interval_seconds: float = 300.0, ttl_seconds: float = 3600.0) -> None:
+        """Start periodic cleanup of old completed/failed tasks.
+
+        Args:
+            interval_seconds: How often to run cleanup (default: 5 minutes)
+            ttl_seconds: Age threshold for removing tasks (default: 1 hour)
+        """
+        if self._task_cleanup_task and not self._task_cleanup_task.done():
+            return
+        self._task_cleanup_task = asyncio.create_task(
+            self._task_cleanup_loop(interval_seconds, ttl_seconds)
+        )
+
+    async def stop_task_cleanup(self) -> None:
+        """Stop the task cleanup background task."""
+        task = self._task_cleanup_task
+        self._task_cleanup_task = None
+        if not task:
+            return
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    async def _task_cleanup_loop(self, interval_seconds: float, ttl_seconds: float) -> None:
+        """Background loop to periodically clean up old tasks."""
+        while True:
+            try:
+                await self._cleanup_old_tasks(ttl_seconds)
+            except Exception as e:
+                logger.exception("Error during task cleanup")
+            await asyncio.sleep(interval_seconds)
+
+    async def _cleanup_old_tasks(self, ttl_seconds: float) -> None:
+        """Remove completed/failed tasks older than ttl_seconds."""
+        now = time.time()
+        tasks_to_remove = []
+
+        for task_id, task in self.tasks.items():
+            # Only clean up completed or failed tasks
+            if task.status not in (TaskStatus.COMPLETED, TaskStatus.FAILED):
+                continue
+
+            # Check if task is older than TTL
+            age = now - task.updated_at
+            if age > ttl_seconds:
+                tasks_to_remove.append(task_id)
+
+        # Remove old tasks
+        for task_id in tasks_to_remove:
+            self.tasks.pop(task_id, None)
+            # Also clean up subscribers
+            self._task_subscribers.pop(task_id, None)
+
+        if tasks_to_remove:
+            logger.info(f"Cleaned up {len(tasks_to_remove)} old tasks")
 
     async def clear_vm_config_cache(self, vm_name: str) -> None:
         async with self._vm_config_lock:
@@ -450,8 +549,7 @@ class TaskManager:
         vms: List[VMModel] = []
 
         async def _fetch_ip(vm: VMModel) -> None:
-            await self._ip_semaphore.acquire()
-            try:
+            async with self._ip_semaphore:
                 rc2, ip_stdout, _ = await self.run_tart_command(
                     ["ip", "--wait", "2", vm.name],
                     task_id,
@@ -461,8 +559,6 @@ class TaskManager:
                     ip = ip_stdout.strip()
                     if ip:
                         vm.ip_address = ip
-            finally:
-                self._ip_semaphore.release()
 
         ip_tasks: List[asyncio.Task] = []
         for vm_data in vms_data:
