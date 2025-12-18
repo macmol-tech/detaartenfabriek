@@ -383,7 +383,7 @@ async def get_categorized_vms():
     )
 
 
-@app.get("/api/vms/{vm_name}", response_model=VMModel, dependencies=[Depends(verify_token)])
+@app.get("/api/vms/{vm_name:path}", response_model=VMModel, dependencies=[Depends(verify_token)])
 async def get_vm(vm_name: str):
     """Get details for a specific VM."""
     vms = await task_manager.get_inventory()
@@ -393,13 +393,13 @@ async def get_vm(vm_name: str):
     raise HTTPException(status_code=404, detail=f"VM '{vm_name}' not found")
 
 
-@app.get("/api/vms/{vm_name}/config", response_model=VMConfigModel, dependencies=[Depends(verify_token)])
+@app.get("/api/vms/{vm_name:path}/config", response_model=VMConfigModel, dependencies=[Depends(verify_token)])
 async def get_vm_config(vm_name: str, force_refresh: bool = False):
     """Get a VM's configuration via `tart get --format json` (cached server-side)."""
     return await task_manager.get_vm_config(vm_name, force_refresh=force_refresh)
 
 
-@app.post("/api/vms/{vm_name}/start", response_model=TaskModel, dependencies=[Depends(verify_token)])
+@app.post("/api/vms/{vm_name:path}/start", response_model=TaskModel, dependencies=[Depends(verify_token)])
 async def start_vm(
     vm_name: str,
     payload: Optional[StartVMRequest] = Body(default=None),
@@ -485,7 +485,7 @@ async def _start_vm(task_id: str, vm_name: str, vnc: bool, extra_args: List[str]
         )
 
 
-@app.post("/api/vms/{vm_name}/delete", response_model=TaskModel, dependencies=[Depends(verify_token)])
+@app.post("/api/vms/{vm_name:path}/delete", response_model=TaskModel, dependencies=[Depends(verify_token)])
 async def delete_vm(vm_name: str):
     """Delete a VM."""
     task = await task_manager.create_task("delete_vm", vm_name=vm_name)
@@ -522,7 +522,7 @@ async def _delete_vm(task_id: str, vm_name: str):
         )
 
 
-@app.post("/api/vms/{vm_name}/stop", response_model=TaskModel, dependencies=[Depends(verify_token)])
+@app.post("/api/vms/{vm_name:path}/stop", response_model=TaskModel, dependencies=[Depends(verify_token)])
 async def stop_vm(vm_name: str):
     """Stop a VM."""
     task = await task_manager.create_task("stop_vm", vm_name=vm_name)
@@ -729,7 +729,7 @@ async def _create_vm(
         )
 
 
-@app.post("/api/vms/{vm_name}/clone", response_model=TaskModel, dependencies=[Depends(verify_token)])
+@app.post("/api/vms/{vm_name:path}/clone", response_model=TaskModel, dependencies=[Depends(verify_token)])
 async def clone_vm(vm_name: str, payload: CloneVMRequest):
     """Clone a VM and optionally start it with VNC."""
     task = await task_manager.create_task("clone_vm", vm_name=vm_name)
