@@ -1272,8 +1272,8 @@
                 tokenStatus.innerHTML = `<i class="fas fa-check-circle mr-1"></i> Token configured: ${escapeHtml(status.masked_token || 'Active')}`;
                 tokenStatus.classList.remove('hidden');
             } else {
-                tokenStatus.className = 'text-sm text-gray-600 bg-gray-50 p-2 rounded';
-                tokenStatus.innerHTML = '<i class="fas fa-info-circle mr-1"></i> No token configured - using static image list';
+                tokenStatus.className = 'text-sm text-yellow-600 bg-yellow-50 p-2 rounded';
+                tokenStatus.innerHTML = '<i class="fas fa-exclamation-triangle mr-1"></i> No token configured';
                 tokenStatus.classList.remove('hidden');
             }
         } catch (error) {
