@@ -57,7 +57,7 @@ Fields:
 
 ### Task
 
-Returned by start/stop/delete/pull endpoints and `/api/tasks/{task_id}`.
+Returned by start/stop/delete/pull/clone/create endpoints and `/api/tasks/{task_id}`.
 
 Fields:
 
@@ -73,6 +73,27 @@ Fields:
 - `updated_at`: unix timestamp (float)
 - `logs`: array of strings
 
+### VM Image
+
+Returned by `/api/vms/available-images`.
+
+Fields:
+
+- `name`: string (e.g., `macos-ventura-base`)
+- `url`: string (OCI URL, e.g., `ghcr.io/cirruslabs/macos-ventura-base:latest`)
+- `description`: string or null
+- `tags`: array of strings (available tags for the image)
+- `updated_at`: string or null (ISO 8601 timestamp)
+
+### VM Images Summary
+
+Returned by `/api/vms/categorized`.
+
+Fields:
+
+- `base_images`: array of VM objects (OCI-pulled images)
+- `working_vms`: array of VM objects (locally created/cloned VMs)
+
 ## Endpoints
 
 ### Health
@@ -80,6 +101,57 @@ Fields:
 #### `GET /api/health`
 
 Returns server status and version.
+
+### Settings
+
+#### `GET /api/settings/github-token`
+
+Get GitHub token configuration status (without revealing the actual token).
+
+Response:
+
+```json
+{
+  "configured": true,
+  "masked_token": "ghp_...xyz"
+}
+```
+
+Example:
+
+```bash
+curl -H "X-Local-Token: $TOKEN" http://127.0.0.1:8000/api/settings/github-token
+```
+
+#### `POST /api/settings/github-token`
+
+Set or clear the GitHub API token.
+
+Request body:
+
+```json
+{
+  "token": "ghp_your_github_token_here"
+}
+```
+
+To clear the token, send an empty string:
+
+```json
+{
+  "token": ""
+}
+```
+
+Example:
+
+```bash
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -H "X-Local-Token: $TOKEN" \
+  -d '{"token":"ghp_your_token_here"}' \
+  http://127.0.0.1:8000/api/settings/github-token
+```
 
 ### Tart
 
@@ -94,6 +166,32 @@ curl -H "X-Local-Token: $TOKEN" http://127.0.0.1:8000/api/tart/version
 ```
 
 ### VMs
+
+#### `GET /api/vms/available-images`
+
+Get list of available Cirrus Labs macOS images from GitHub API.
+
+**Requires a GitHub personal access token to be configured** (see Settings endpoints).
+
+Returns an array of `VMImageModel` objects with available macOS images that can be pulled.
+
+Example:
+
+```bash
+curl -H "X-Local-Token: $TOKEN" http://127.0.0.1:8000/api/vms/available-images
+```
+
+#### `GET /api/vms/categorized`
+
+Get VMs categorized as base images (OCI-pulled) vs working VMs (locally created/cloned).
+
+Returns a `VMImagesSummary` object.
+
+Example:
+
+```bash
+curl -H "X-Local-Token: $TOKEN" http://127.0.0.1:8000/api/vms/categorized
+```
 
 #### `GET /api/vms`
 
@@ -221,7 +319,66 @@ curl -X POST \
   http://127.0.0.1:8000/api/vms/pull
 ```
 
+#### `POST /api/vms/{vm_name}/clone`
+
+Clone a VM and optionally start it with VNC.
+
+Request body:
+
+```json
+{
+  "new_name": "my-cloned-vm",
+  "start_after_clone": false
+}
+```
+
+Example:
+
+```bash
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -H "X-Local-Token: $TOKEN" \
+  -d '{"new_name":"my-clone","start_after_clone":true}' \
+  http://127.0.0.1:8000/api/vms/base-image/clone
+```
+
+#### `POST /api/vms/create`
+
+Create a new VM by cloning a base image and configuring CPU/memory/disk.
+
+Request body:
+
+```json
+{
+  "name": "my-new-vm",
+  "source_vm": "ghcr.io/cirruslabs/macos-ventura-base:latest",
+  "cpu": 4,
+  "memory": 8,
+  "disk_size": 50
+}
+```
+
+Example:
+
+```bash
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -H "X-Local-Token: $TOKEN" \
+  -d '{"name":"dev-vm","source_vm":"ghcr.io/cirruslabs/macos-ventura-base:latest","cpu":4,"memory":8,"disk_size":50}' \
+  http://127.0.0.1:8000/api/vms/create
+```
+
 ### Tasks
+
+#### `GET /api/tasks/active`
+
+Returns a list of all active (non-completed, non-failed) tasks.
+
+Example:
+
+```bash
+curl -H "X-Local-Token: $TOKEN" http://127.0.0.1:8000/api/tasks/active
+```
 
 #### `GET /api/tasks/{task_id}`
 
